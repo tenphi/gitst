@@ -13,8 +13,8 @@ var exec,
 commands = {
 
 	showPrefixes: {
-		exec: "git log | grep git-subtree-dir | tr -d ' ' | cut -d ':' -f2 | sort | uniq | xargs -I {} bash -c 'if [ -d $(git rev-parse --show-toplevel)/{} ] ; then echo {}; fi'"
-		//mock: 'data/bem/JSSDK\ndata/bem/toolkit\ndata/bem/venezia'
+		exec: "git log | grep git-subtree-dir | tr -d ' ' | cut -d ':' -f2 | sort | uniq | xargs -I {} bash -c 'if [ -d $(git rev-parse --show-toplevel)/{} ] ; then echo {}; fi'",
+		mock: 'data/bem/JSSDK\ndata/bem/toolkit\ndata/bem/venezia'
 	},
 
 	showRemotes: {
@@ -124,7 +124,7 @@ if (!args.length || flags.help) {
 					return;
 				}
 
-				pull(args[1], args[2] || 'master', prefix, function(err, stdout, stderr) {
+				pull(origin, branch || 'master', prefix, function(err, stdout, stderr) {
 					util.puts(stdout);
 					if (err) return util.puts(err, stderr);
 				});
@@ -133,13 +133,23 @@ if (!args.length || flags.help) {
 
 			case 'push':
 				if (!origin) {
-					pushAll(repo);
+					fetchAll(repo, function(err, stdout, stderr) {
+						util.puts(stdout);
+						if (err) return util.puts(err, stderr);
+
+						pushAll(repo);
+					});
 					return;
 				}
 
-				push(args[1], args[2] || 'master', prefix, function(err, stdout, stderr) {
+				fetch(origin, branch || 'master', function(err, stdout, stderr) {
 					util.puts(stdout);
 					if (err) return util.puts(err, stderr);
+
+					push(origin, branch || 'master', prefix, function(err, stdout, stderr) {
+						util.puts(stdout);
+						if (err) return util.puts(err, stderr);
+					});
 				});
 
 				break;
@@ -300,7 +310,7 @@ function fetchAll(repo, cb) {
 
 	stack = origins.map(function(origin) {
 		return function(cb) {
-			fetch(origin, 'master', cb);
+			fetch(origin, cb);
 		};
 	});
 
@@ -309,6 +319,12 @@ function fetchAll(repo, cb) {
 
 function series(stack, cb) {
 	var callback = cb, i;
+
+	if (!stack || !stack.length) {
+		process.nextTick(function() {
+			cb && cb();
+		});
+	}
 
 	for (i = stack.length - 1; i >= 0; i--) {
 		cb = (function(func, cb) {
