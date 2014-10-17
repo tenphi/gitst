@@ -51,11 +51,14 @@ debug = flags.debug;
 mock = flags.mock;
 
 exec = function(commandName, args, cb) {
+	var command;
+
 	if (!args) {
 		args = [];
 	}
 
-	var command = util.format.apply(util, [commands[commandName].exec].concat(args));
+	command = util.format.apply(util, [commands[commandName].exec].concat(args));
+
 	if (debug) {
 		util.puts('$ ' + command);
 	}
@@ -111,7 +114,7 @@ if (!args.length || flags.help) {
 					fetchAll(repo);
 				}
 
-				fetch(origin, branch || 'master', function(err, stdout, stderr) {
+				fetch(origin, function(err, stdout, stderr) {
 					util.puts(stdout);
 					if (err) return util.puts(err, stderr);
 				});
@@ -142,7 +145,7 @@ if (!args.length || flags.help) {
 					return;
 				}
 
-				fetch(origin, branch || 'master', function(err, stdout, stderr) {
+				fetch(origin, function(err, stdout, stderr) {
 					util.puts(stdout);
 					if (err) return util.puts(err, stderr);
 
@@ -169,8 +172,6 @@ function originNotFound(origin) {
 }
 
 function init(cb) {
-	debug && util.puts('#init()');
-	
 	getPrefixes(function(err, prefixes) {
 		getOrigins(function(err, origins) {
 			createRepo(origins, prefixes, cb);
@@ -179,8 +180,6 @@ function init(cb) {
 }
 
 function list(repo) {
-	debug && util.puts('#list()');
-	
 	var prefixes = repo.prefixes;
 
 	if (prefixes.length) {
@@ -199,7 +198,7 @@ function list(repo) {
 }
 
 function getPrefixes(cb) {
-	debug && util.puts('#getPrefixes()');
+	util.print('Getting prefixes... ');
 	
 	exec('showPrefixes', null,
 		function(err, stdout, stderr) {
@@ -211,13 +210,16 @@ function getPrefixes(cb) {
 				return prefix.trim();
 			});
 
+			util.puts('OK', '');
+
 			cb && cb(null, prefixes);
 		}
 	);
 }
 
 function getOrigins(cb) {
-	debug && util.puts('#getOrigins()');
+	util.print('Getting origins... ');
+
 	exec('showRemotes', null, function(err, stdout, stderr) {
 		var origins;
 
@@ -229,6 +231,8 @@ function getOrigins(cb) {
 			return prefix.trim();
 		});
 
+		util.puts('OK', '');
+
 		cb && cb(null, origins);
 	});
 }
@@ -238,8 +242,6 @@ function assumeOrigin(prefix) {
 }
 
 function createRepo(origins, prefixes, cb) {
-	debug && util.puts('#createRepo()');
-
 	var repo = {
 		origins: origins || [],
 		prefixes: prefixes || [],
@@ -260,21 +262,36 @@ function createRepo(origins, prefixes, cb) {
 }
 
 function fetch(origin, cb) {
-	debug && util.puts('#fetch()');
-	exec('fetch', [origin], cb);
+	util.print('Fetching `' + origin + '` origin... ');
+	exec('fetch', [origin], function(err) {
+		util.puts(err ? 'Fail' : 'OK', '');
+		cb && cb.apply(null, arguments);
+	});
 }
 
 function pull(origin, branch, prefix, cb) {
-	debug && util.puts('#pull()');
-	exec('pull', [prefix, origin, (branch || 'master')], cb);
+	branch = branch || 'master';
+	util.print('Pulling from `' + origin + '/' + branch + '`... ');
+	exec('pull', [prefix, origin, branch], function(err) {
+		util.puts(err ? 'Fail' : 'OK', '');
+		cb && cb.apply(null, arguments);
+	});
 }
 
 function push(origin, branch, prefix, cb) {
-	debug && util.puts('#push()');
-	exec('push', [prefix, origin, (branch || 'master')], function(err, stdout, stderr) {
-		if (err) return cb && cb(err, stdout, stderr);
+	branch = branch || 'master';
+	util.print('Pushing to `' + origin + '/' + branch + '`... ');
+	exec('push', [prefix, origin, branch], function(err) {
+		if (err) {
+			util.puts('Fail', '');
+			return cb && cb.apply(null, arguments);
+		}
 
-		pull(origin, branch, prefix, cb);
+		util.puts('OK', '');
+
+		pull(origin, branch, prefix, function() {
+			cb && cb.apply(null, arguments);
+		});
 	});
 }
 
