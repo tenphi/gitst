@@ -1,0 +1,325 @@
+#!/usr/bin/env node
+
+var exec,
+	childProcess = require('child_process'),
+	util = require('util'),
+	args = process.argv.slice(2),
+	flags = [],
+	tab = '  ', nl = '\n',
+	debug = false, // log commands
+	mock = false, // do not exec if true
+	commands;
+
+commands = {
+
+	showPrefixes: {
+		exec: "git log | grep git-subtree-dir | tr -d ' ' | cut -d ':' -f2 | sort | uniq | xargs -I {} bash -c 'if [ -d $(git rev-parse --show-toplevel)/{} ] ; then echo {}; fi'"
+		//mock: 'data/bem/JSSDK\ndata/bem/toolkit\ndata/bem/venezia'
+	},
+
+	showRemotes: {
+		exec: 'git remote show',
+		mock: 'toolkit\njssdk'
+	},
+
+	pull: {
+		exec: 'git subtree pull --prefix=%s %s %s',
+		mock: ''
+	},
+
+	push: {
+		exec: 'git subtree push --prefix=%s %s %s',
+		mock: ''
+	},
+
+	fetch: {
+		exec: 'git fetch %s',
+		mock: ''
+	}
+};
+
+args = args.filter(function(arg) {
+	if (arg.slice(0, 2) === '--') {
+		flags[arg.slice(2)] = true;
+		return false;
+	} else {
+		return true;
+	}
+});
+
+debug = flags.debug;
+mock = flags.mock;
+
+exec = function(commandName, args, cb) {
+	if (!args) {
+		args = [];
+	}
+
+	var command = util.format.apply(util, [commands[commandName].exec].concat(args));
+	if (debug) {
+		util.puts('$ ' + command);
+	}
+
+	if (mock) {
+		process.nextTick(function() {
+			cb && cb(null, commands[commandName].mock || '', '');
+		}, 0);
+	} else {
+		childProcess.exec(command, cb);
+	}
+};
+
+util.print('Subtrees CLI v0.0.1', nl, nl);
+
+if (!args.length || flags.help) {
+	util.puts('Usage: subtrees [command] [origin] [branch]', '');
+	util.puts(tab + 'Commands:');
+	util.puts(tab + tab + 'pull - pull subtree');
+	util.puts(tab + tab + 'push - push subtree');
+} else {
+	init(function(err, repo) {
+		var command = args[0],
+			origin = args[1],
+			prefix,
+			branch;
+
+		if (!repo.prefixes.length) {
+			list(repo);
+			return;
+		}
+
+		if (args[1]) {
+			if (repo.prefixByOrigin[origin]) {
+				prefix = repo.prefixByOrigin[origin];
+
+				if (args[2]) {
+					branch = args[2];
+				}
+			} else {
+				return originNotFound(origin);
+			}
+		}
+
+		switch(command) {
+			case 'list':
+				list(repo);
+
+				break;
+
+			case 'fetch':
+				if (!origin) {
+					fetchAll(repo);
+				}
+
+				fetch(origin, branch || 'master', function(err, stdout, stderr) {
+					util.puts(stdout);
+					if (err) return util.puts(err, stderr);
+				});
+
+				break;
+
+			case 'pull':
+				if (!origin) {
+					pullAll(repo);
+					return;
+				}
+
+				pull(args[1], args[2] || 'master', prefix, function(err, stdout, stderr) {
+					util.puts(stdout);
+					if (err) return util.puts(err, stderr);
+				});
+
+				break;
+
+			case 'push':
+				if (!origin) {
+					pushAll(repo);
+					return;
+				}
+
+				push(args[1], args[2] || 'master', prefix, function(err, stdout, stderr) {
+					util.puts(stdout);
+					if (err) return util.puts(err, stderr);
+				});
+
+				break;
+
+			default:
+				util.puts('Command `' + command + '` not found.');
+		}
+	});
+}
+
+function originNotSpecified() {
+	util.puts('Origin not specified.');
+}
+
+function originNotFound(origin) {
+	util.puts('Subtree origin `' + origin + '` not found.');
+}
+
+function init(cb) {
+	debug && util.puts('#init()');
+	
+	getPrefixes(function(err, prefixes) {
+		getOrigins(function(err, origins) {
+			createRepo(origins, prefixes, cb);
+		});
+	});
+}
+
+function list(repo) {
+	debug && util.puts('#list()');
+	
+	var prefixes = repo.prefixes;
+
+	if (prefixes.length) {
+		if (prefixes.length > 1) {
+			util.puts(prefixes.length + ' subtrees found:');
+		} else {
+			util.puts('One subtree found:');
+		}
+	} else {
+		util.puts('No subtree found.');
+	}
+
+	prefixes.forEach(function(prefix) {
+		util.puts(tab + './' + prefix + ' <- ' + (repo.originByPrefix[prefix] || '???'));
+	});
+}
+
+function getPrefixes(cb) {
+	debug && util.puts('#getPrefixes()');
+	
+	exec('showPrefixes', null,
+		function(err, stdout, stderr) {
+			if (err) return cb && cb(err);
+
+			var prefixes = stdout.split('\n').filter(function(prefix) {
+				return !!prefix;
+			}).map(function(prefix) {
+				return prefix.trim();
+			});
+
+			cb && cb(null, prefixes);
+		}
+	);
+}
+
+function getOrigins(cb) {
+	debug && util.puts('#getOrigins()');
+	exec('showRemotes', null, function(err, stdout, stderr) {
+		var origins;
+
+		if (err) return cb && cb(err);
+
+		origins = stdout.split('\n').filter(function(prefix) {
+			return !!prefix;
+		}).map(function(prefix) {
+			return prefix.trim();
+		});
+
+		cb && cb(null, origins);
+	});
+}
+
+function assumeOrigin(prefix) {
+	return prefix.slice(prefix.lastIndexOf('/') + 1).toLowerCase();
+}
+
+function createRepo(origins, prefixes, cb) {
+	debug && util.puts('#createRepo()');
+
+	var repo = {
+		origins: origins || [],
+		prefixes: prefixes || [],
+		prefixByOrigin: {},
+		originByPrefix: {}
+	};
+
+	prefixes.forEach(function(prefix) {
+		var origin = assumeOrigin(prefix);
+
+		if (~origins.indexOf(origin)) {
+			repo.prefixByOrigin[origin] = prefix;
+			repo.originByPrefix[prefix] = origin;
+		}
+	});
+
+	cb && cb(null, repo);
+}
+
+function fetch(origin, cb) {
+	debug && util.puts('#fetch()');
+	exec('fetch', [origin], cb);
+}
+
+function pull(origin, branch, prefix, cb) {
+	debug && util.puts('#pull()');
+	exec('pull', [prefix, origin, (branch || 'master')], cb);
+}
+
+function push(origin, branch, prefix, cb) {
+	debug && util.puts('#push()');
+	exec('push', [prefix, origin, (branch || 'master')], function(err, stdout, stderr) {
+		if (err) return cb && cb(err, stdout, stderr);
+
+		pull(origin, branch, prefix, cb);
+	});
+}
+
+function pullAll(repo, cb) {
+	var origins = Object.keys(repo.prefixByOrigin), // pull only subtree origins
+		stack;
+
+	stack = origins.map(function(origin) {
+		return function(cb) {
+			pull(origin, 'master', repo.prefixByOrigin[origin], cb);
+		};
+	});
+
+	series(stack, cb);
+}
+
+function pushAll(repo, cb) {
+	var origins = Object.keys(repo.prefixByOrigin), // push only subtree origins
+		stack;
+
+	stack = origins.map(function(origin) {
+		return function(cb) {
+			push(origin, 'master', repo.prefixByOrigin[origin], cb);
+		};
+	});
+
+	series(stack, cb);
+}
+
+function fetchAll(repo, cb) {
+	var origins = Object.keys(repo.prefixByOrigin), // fetch only subtree origins
+		stack;
+
+	stack = origins.map(function(origin) {
+		return function(cb) {
+			fetch(origin, 'master', cb);
+		};
+	});
+
+	series(stack, cb);
+}
+
+function series(stack, cb) {
+	var callback = cb, i;
+
+	for (i = stack.length - 1; i >= 0; i--) {
+		cb = (function(func, cb) {
+			return function(err) {
+				if (err) {
+					callback.apply(null, arguments);
+				}
+				return func(cb);
+			};
+		})(stack[i], cb);
+	}
+
+	cb();
+}
