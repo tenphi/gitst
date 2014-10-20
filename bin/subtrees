@@ -111,7 +111,11 @@ if (!args.length || flags.help) {
 
 			case 'fetch':
 				if (!origin) {
-					fetchAll(repo);
+					fetchAll(repo, function(err, stdout, stderr) {
+						util.puts(stdout);
+						if (err) return util.puts(err, stderr);
+					});
+					return;
 				}
 
 				fetch(origin, function(err, stdout, stderr) {
@@ -123,7 +127,10 @@ if (!args.length || flags.help) {
 
 			case 'pull':
 				if (!origin) {
-					pullAll(repo);
+					pullAll(repo, function(err, stdout, stderr) {
+						util.puts(stdout);
+						if (err) return util.puts(err, stderr);
+					});
 					return;
 				}
 
@@ -140,7 +147,10 @@ if (!args.length || flags.help) {
 						util.puts(stdout);
 						if (err) return util.puts(err, stderr);
 
-						pushAll(repo);
+						pushAll(repo, function(err, stdout, stderr) {
+							util.puts(stdout);
+							if (err) return util.puts(err, stderr);
+						});
 					});
 					return;
 				}
