@@ -11,7 +11,7 @@ Git-репозиторий не содержит достаточной инфо
 	$ git remote add kit user@git.repository.com/kit.git
 	$ git subtree add --prefix=path/to/kit kit master
 
-path/to/**kit** - имя последней директории совпадает с именем origin'а **kit**.
+path/to/ **kit** - имя последней директории совпадает с именем origin'а **kit**.
 
 ## команды
 
