@@ -72,10 +72,10 @@ exec = function(commandName, args, cb) {
 	}
 };
 
-util.print('Subtrees CLI v0.0.1', nl, nl);
+util.print('Git Subtree Helper CLI v0.0.1', nl, nl);
 
 if (!args.length || flags.help) {
-	util.puts('Usage: subtrees [command] [origin] [branch]', '');
+	util.puts('Usage: gitst [command] [origin] [branch]', '');
 	util.puts(tab + 'Commands:');
 	util.puts(tab + tab + 'pull - pull subtree');
 	util.puts(tab + tab + 'push - push subtree');

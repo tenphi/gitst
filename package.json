@@ -1,0 +1,26 @@
+{
+  "name": "gitst",
+  "version": "0.0.1",
+  "description": "Git Subtree Helper",
+  "bin": {
+    "gitst": "bin/gitst"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tenphi/gitst.git"
+  },
+  "keywords": [
+    "git",
+    "subtree",
+    "helper"
+  ],
+  "author": "Andrey Yamanov <tenphi@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tenphi/gitst/issues"
+  },
+  "homepage": "https://github.com/tenphi/gitst"
+}
